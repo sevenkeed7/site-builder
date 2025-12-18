@@ -1,50 +1,152 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { supabase } from './supabaseClient'
-import { ShoppingCart, Phone, X, Instagram, Send, ExternalLink } from 'lucide-react'
+import { ShoppingCart, Phone, X, Instagram, Send, CheckCircle } from 'lucide-react'
 
-// Компонент для отображения иконок соцсетей
+// --- SOCIALS COMPONENT ---
 const Socials = ({ data, theme = 'light' }) => {
     let contacts = { phone: '', telegram: '', instagram: '' }
-    let isLegacy = false
-
-    try {
-        // Пытаемся понять, это JSON или старый текст?
-        if (data.startsWith('{')) {
-            contacts = JSON.parse(data)
-        } else {
-            isLegacy = true // Это старый сайт, где просто текст
-        }
-    } catch (e) { isLegacy = true }
-
-    if (isLegacy) return <p className={theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}>{data}</p>
-
+    try { contacts = JSON.parse(data) } catch (e) { return <p>{data}</p> }
     const iconClass = theme === 'dark' ? 'text-yellow-500 hover:text-white' : 'text-gray-600 hover:text-blue-600'
 
     return (
         <div className="flex flex-col items-center gap-3">
-            {contacts.phone && (
-                <a href={`tel:${contacts.phone}`} className={`flex items-center gap-2 ${iconClass}`}>
-                    <Phone size={20}/> {contacts.phone}
-                </a>
-            )}
+            {contacts.phone && <a href={`tel:${contacts.phone}`} className={`flex items-center gap-2 ${iconClass}`}><Phone size={20}/> {contacts.phone}</a>}
             <div className="flex gap-6 mt-2">
-                {contacts.telegram && (
-                    <a href={`https://t.me/${contacts.telegram}`} target="_blank" className={iconClass}>
-                        <Send size={24}/>
-                    </a>
+                {contacts.telegram && <a href={`https://t.me/${contacts.telegram}`} target="_blank" className={iconClass}><Send size={24}/></a>}
+                {contacts.instagram && <a href={contacts.instagram} target="_blank" className={iconClass}><Instagram size={24}/></a>}
+            </div>
+        </div>
+    )
+}
+
+// --- CART & CHECKOUT DRAWER ---
+const CartDrawer = ({ cart, removeFromCart, isOpen, close, currency, siteId }) => {
+    const [step, setStep] = useState('cart') // 'cart' | 'form' | 'success'
+    // Добавили поле telegram в стейт
+    const [form, setForm] = useState({ name: '', phone: '', telegram: '', comment: '' })
+    const [loading, setLoading] = useState(false)
+
+    if (!isOpen) return null
+
+    const total = cart.reduce((sum, item) => sum + Number(item.price), 0)
+
+    const submitOrder = async (e) => {
+        e.preventDefault()
+        setLoading(true)
+
+        // Сохраняем все данные, включая Telegram
+        const { error } = await supabase.from('orders').insert([{
+            site_id: siteId,
+            customer_info: form,
+            items: cart,
+            total: total
+        }])
+
+        if (error) alert('Ошибка заказа')
+        else setStep('success')
+
+        setLoading(false)
+    }
+
+    return (
+        <div className="fixed inset-0 z-[100] flex justify-end">
+            <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={close}></div>
+            <div className="relative w-full max-w-md bg-white h-full shadow-2xl p-6 flex flex-col animate-slide-in">
+                <button onClick={close} className="absolute top-4 right-4 text-gray-400 hover:text-black"><X/></button>
+
+                {/* STEP 1: CART LIST */}
+                {step === 'cart' && (
+                    <>
+                        <h2 className="text-xl font-bold mb-6 text-black">Корзина</h2>
+                        <div className="flex-1 overflow-y-auto space-y-4">
+                            {cart.length === 0 && <p className="text-gray-500 text-center mt-10">Корзина пуста</p>}
+                            {cart.map((item, idx) => (
+                                <div key={idx} className="flex gap-4 border-b pb-4">
+                                    <img src={item.image} className="w-16 h-16 rounded object-cover bg-gray-100"/>
+                                    <div className="flex-1">
+                                        <div className="font-bold text-gray-900">{item.name}</div>
+                                        <div className="text-gray-500">{item.price} {currency}</div>
+                                    </div>
+                                    <button onClick={() => removeFromCart(idx)} className="text-red-500 text-sm">Удалить</button>
+                                </div>
+                            ))}
+                        </div>
+                        {cart.length > 0 && (
+                            <div className="border-t pt-4 mt-4">
+                                <div className="flex justify-between text-xl font-bold mb-4 text-black">
+                                    <span>Итого:</span>
+                                    <span>{total} {currency}</span>
+                                </div>
+                                <button onClick={() => setStep('form')} className="w-full bg-blue-600 text-white py-3 rounded-lg font-bold hover:bg-blue-700">Оформить заказ</button>
+                            </div>
+                        )}
+                    </>
                 )}
-                {contacts.instagram && (
-                    <a href={contacts.instagram} target="_blank" className={iconClass}>
-                        <Instagram size={24}/>
-                    </a>
+
+                {/* STEP 2: ORDER FORM */}
+                {step === 'form' && (
+                    <>
+                        <h2 className="text-xl font-bold mb-6 text-black">Оформление</h2>
+                        <form onSubmit={submitOrder} className="flex-1 space-y-4">
+                            <div>
+                                <label className="block text-sm text-gray-600 mb-1">Ваше имя</label>
+                                <input required className="w-full border p-2 rounded text-black" value={form.name} onChange={e => setForm({...form, name: e.target.value})} placeholder="Иван"/>
+                            </div>
+
+                            {/* Поле ТЕЛЕФОН */}
+                            <div>
+                                <label className="block text-sm text-gray-600 mb-1">Телефон</label>
+                                <input required className="w-full border p-2 rounded text-black" value={form.phone} onChange={e => setForm({...form, phone: e.target.value})} placeholder="+7 999 ..."/>
+                            </div>
+
+                            {/* Поле TELEGRAM */}
+                            <div>
+                                <label className="block text-sm text-gray-600 mb-1">Ваш Telegram (для связи)</label>
+                                <div className="relative">
+                                    <Send size={16} className="absolute left-3 top-3 text-blue-500"/>
+                                    <input
+                                        className="w-full border p-2 pl-9 rounded text-black"
+                                        value={form.telegram}
+                                        onChange={e => setForm({...form, telegram: e.target.value})}
+                                        placeholder="@username или ник"
+                                    />
+                                </div>
+                            </div>
+
+                            <div>
+                                <label className="block text-sm text-gray-600 mb-1">Комментарий к заказу</label>
+                                <textarea className="w-full border p-2 rounded text-black" value={form.comment} onChange={e => setForm({...form, comment: e.target.value})} placeholder="Код домофона, размер..."/>
+                            </div>
+
+                            <div className="bg-gray-50 p-4 rounded text-sm text-gray-600 mt-auto">
+                                <div className="flex justify-between font-bold mb-1"><span>Сумма к оплате:</span><span>{total} {currency}</span></div>
+                                <p>Нажимая кнопку, вы подтверждаете заказ.</p>
+                            </div>
+
+                            <button disabled={loading} className="w-full bg-green-600 text-white py-3 rounded-lg font-bold hover:bg-green-700">
+                                {loading ? 'Отправка...' : 'Подтвердить заказ'}
+                            </button>
+                            <button type="button" onClick={() => setStep('cart')} className="w-full text-gray-500 py-2">Назад</button>
+                        </form>
+                    </>
+                )}
+
+                {/* STEP 3: SUCCESS */}
+                {step === 'success' && (
+                    <div className="flex flex-col items-center justify-center h-full text-center">
+                        <CheckCircle size={64} className="text-green-500 mb-4"/>
+                        <h2 className="text-2xl font-bold text-black mb-2">Заказ принят!</h2>
+                        <p className="text-gray-600">Мы свяжемся с вами в Telegram или по телефону.</p>
+                        <button onClick={close} className="mt-8 bg-gray-900 text-white px-6 py-2 rounded-lg">Вернуться в магазин</button>
+                    </div>
                 )}
             </div>
         </div>
     )
 }
 
-// --- MINIMAL ---
+// --- TEMPLATES (Оставляем как были) ---
 const MinimalTemplate = ({ site, products, cart, addToCart, setIsCartOpen }) => (
     <div className="font-sans text-gray-800 bg-white min-h-screen flex flex-col">
         <nav className="border-b sticky top-0 bg-white/95 backdrop-blur z-50">
@@ -81,14 +183,10 @@ const MinimalTemplate = ({ site, products, cart, addToCart, setIsCartOpen }) => 
                 ))}
             </div>
         </main>
-        <footer className="bg-gray-100 py-10 mt-10 text-center">
-            <h3 className="font-bold mb-4 text-gray-400 uppercase text-xs tracking-widest">Контакты</h3>
-            <Socials data={site.contacts} theme="light" />
-        </footer>
+        <footer className="bg-gray-100 py-10 mt-10 text-center"><Socials data={site.contacts} theme="light" /></footer>
     </div>
 )
 
-// --- DARK LUXURY ---
 const DarkTemplate = ({ site, products, cart, addToCart, setIsCartOpen }) => (
     <div className="font-serif text-gray-100 bg-zinc-900 min-h-screen flex flex-col">
         <nav className="border-b border-zinc-800 sticky top-0 bg-zinc-900/95 backdrop-blur z-50">
@@ -104,7 +202,6 @@ const DarkTemplate = ({ site, products, cart, addToCart, setIsCartOpen }) => (
             <div className="absolute inset-0 bg-black opacity-50"></div>
             <div className="relative z-10">
                 <h1 className="text-5xl md:text-7xl font-thin mb-6 text-white tracking-widest uppercase">{site.name}</h1>
-                <div className="w-24 h-1 bg-yellow-600 mx-auto mb-6"></div>
                 <p className="text-xl text-gray-300 max-w-xl mx-auto italic font-light">{site.description}</p>
             </div>
         </div>
@@ -127,46 +224,9 @@ const DarkTemplate = ({ site, products, cart, addToCart, setIsCartOpen }) => (
                 ))}
             </div>
         </main>
-        <footer className="bg-black py-16 mt-10 text-center border-t border-zinc-800">
-            <h3 className="text-yellow-600 mb-6 uppercase tracking-widest text-sm">Связь с нами</h3>
-            <Socials data={site.contacts} theme="dark" />
-        </footer>
+        <footer className="bg-black py-16 mt-10 text-center border-t border-zinc-800"><Socials data={site.contacts} theme="dark" /></footer>
     </div>
 )
-
-const CartDrawer = ({ cart, removeFromCart, isOpen, close, currency }) => {
-    if (!isOpen) return null
-    return (
-        <div className="fixed inset-0 z-[100] flex justify-end">
-            <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={close}></div>
-            <div className="relative w-full max-w-md bg-white h-full shadow-2xl p-6 flex flex-col animate-slide-in">
-                <div className="flex justify-between items-center mb-6">
-                    <h2 className="text-xl font-bold text-black">Ваш заказ</h2>
-                    <button onClick={close} className="text-black"><X/></button>
-                </div>
-                <div className="flex-1 overflow-y-auto space-y-4">
-                    {cart.map((item, idx) => (
-                        <div key={idx} className="flex gap-4 border-b pb-4">
-                            <img src={item.image} className="w-16 h-16 rounded object-cover bg-gray-100"/>
-                            <div className="flex-1">
-                                <div className="font-bold text-gray-900">{item.name}</div>
-                                <div className="text-gray-500">{item.price} {currency}</div>
-                            </div>
-                            <button onClick={() => removeFromCart(idx)} className="text-red-500 text-sm">Удалить</button>
-                        </div>
-                    ))}
-                </div>
-                <div className="border-t pt-4 mt-4">
-                    <div className="flex justify-between text-xl font-bold mb-4 text-black">
-                        <span>Итого:</span>
-                        <span>{cart.reduce((sum, item) => sum + Number(item.price), 0)} {currency}</span>
-                    </div>
-                    <button onClick={() => alert('Спасибо за заказ!')} className="w-full bg-blue-600 text-white py-3 rounded-lg font-bold">Оплатить</button>
-                </div>
-            </div>
-        </div>
-    )
-}
 
 export default function Viewer() {
     const { id } = useParams()
@@ -176,8 +236,7 @@ export default function Viewer() {
     const [loading, setLoading] = useState(true)
 
     useEffect(() => {
-        supabase.from('sites').select('*').eq('id', id).single()
-            .then(({ data }) => { setSite(data); setLoading(false) })
+        supabase.from('sites').select('*').eq('id', id).single().then(({ data }) => { setSite(data); setLoading(false) })
     }, [id])
 
     const addToCart = (p) => { setCart([...cart, p]); setIsCartOpen(true) }
@@ -188,12 +247,11 @@ export default function Viewer() {
 
     return (
         <>
-            {site.template_id === 'dark' ? (
-                <DarkTemplate site={site} products={site.content || []} cart={cart} addToCart={addToCart} setIsCartOpen={setIsCartOpen}/>
-            ) : (
+            {site.template_id === 'dark' ?
+                <DarkTemplate site={site} products={site.content || []} cart={cart} addToCart={addToCart} setIsCartOpen={setIsCartOpen}/> :
                 <MinimalTemplate site={site} products={site.content || []} cart={cart} addToCart={addToCart} setIsCartOpen={setIsCartOpen}/>
-            )}
-            <CartDrawer isOpen={isCartOpen} close={() => setIsCartOpen(false)} cart={cart} removeFromCart={removeFromCart} currency={site.currency}/>
+            }
+            <CartDrawer isOpen={isCartOpen} close={() => setIsCartOpen(false)} cart={cart} removeFromCart={removeFromCart} currency={site.currency} siteId={id}/>
         </>
     )
 }
