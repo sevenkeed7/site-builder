@@ -46,7 +46,7 @@ export default function Dashboard({ session }) {
                 <div className="px-4 mx-auto max-w-7xl sm:px-6 lg:px-8">
                     <div className="flex justify-between h-16">
                         <div className="flex items-center text-xl font-bold text-blue-600">
-                            MyBuilder <span className="text-gray-400 text-xs ml-2 font-normal">v1.0</span>
+                            BahaBuilder <span className="text-gray-400 text-xs ml-2 font-normal">v1.0</span>
                         </div>
                         <div className="flex items-center gap-4">
                             <span className="text-sm text-gray-500 hidden sm:inline">{session.user.email}</span>
